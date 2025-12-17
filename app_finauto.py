@@ -12,7 +12,6 @@ st.set_page_config(page_title="FinAuto - Cloud", page_icon="☁️", layout="wid
 COR_PRIMARIA = "#0ea5e9"
 
 # --- 1. BANCO DE DADOS (VIA GOOGLE SHEETS) ---
-# A conexão agora busca os dados na nuvem, não mais no arquivo local
 def get_connection():
     return st.connection("gsheets", type=GSheetsConnection)
 
@@ -53,10 +52,11 @@ def deletar_registro(index_para_remover):
     df = carregar_dados()
     
     # Remove pelo index
-    df_final = df.drop(index_para_remover)
-    
-    conn.update(worksheet="Dados", data=df_final)
-    st.cache_data.clear()
+    # Como o index do Pandas pode não bater com a linha do Sheets, recriamos o DF
+    if index_para_remover in df.index:
+        df_final = df.drop(index_para_remover)
+        conn.update(worksheet="Dados", data=df_final)
+        st.cache_data.clear()
 
 # --- 2. FERRAMENTAS DE TEXTO ---
 
@@ -245,7 +245,10 @@ with tabs[3]:
         m1, m2, m3 = st.columns(3)
         m1.info(f"Entradas: **R$ {total_rec:.2f}**")
         m2.error(f"Saídas: **R$ {total_desp:.2f}**")
-        m3.success(f"Saldo: **R$ {saldo_periodo:.2f}**") if saldo_periodo >=0 else m3.warning(f"Saldo: **R$ {saldo_periodo:.2f}**")
+        if saldo_periodo >= 0:
+            m3.success(f"Saldo: **R$ {saldo_periodo:.2f}**")
+        else:
+            m3.warning(f"Saldo: **R$ {saldo_periodo:.2f}**")
 
         # Exclusão
         id_del = st.number_input("ID para excluir (índice da tabela)", min_value=0, step=1)
@@ -290,57 +293,3 @@ with tabs[2]:
         if st.form_submit_button("Salvar"):
             salvar_dados(pd.DataFrame([{'Data': d, 'Descricao': desc, 'Categoria': cat, 'Valor': v, 'Tipo': t, 'Origem': 'Manual', 'Detalhes_JSON': ''}]))
             st.success("Salvo!")
-```
-
-### Passo 3: Configurar a "Chave" do Google (A parte chata, mas necessária)
-
-Para o seu código ter permissão de escrever na sua planilha, precisamos criar um "Robô" no Google. Siga com calma:
-
-1.  **Crie uma Planilha:**
-    * Vá no [Google Sheets](https://sheets.new) e crie uma planilha vazia.
-    * Nomeie ela como `FinAutoDB` (ou o que preferir).
-    * Renomeie a aba (lá embaixo) de "Página1" para **`Dados`**.
-
-2.  **Habilitar o Acesso:**
-    * Acesse o [Google Cloud Console](https://console.cloud.google.com/).
-    * Crie um "Novo Projeto" (dê o nome de FinAuto).
-    * Na barra de busca, procure por **"Google Sheets API"** e clique em **Ativar**.
-    * Procure por **"Google Drive API"** e clique em **Ativar**.
-
-3.  **Criar o Robô (Service Account):**
-    * No menu lateral, vá em **"IAM e Admin"** > **"Contas de Serviço"** (Service Accounts).
-    * Clique em "+ Criar Conta de Serviço". Dê um nome e clique em Continuar/Concluir.
-    * Vai aparecer um email estranho na lista (algo como `finauto@finauto-123.iam.gserviceaccount.com`). **Copie esse email.**
-
-4.  **Compartilhar a Planilha:**
-    * Volte na sua planilha do Google Sheets.
-    * Clique em "Compartilhar" (Share).
-    * Cole o email do robô que você copiou e dê permissão de **Editor**. (Isso autoriza o robô a escrever lá).
-
-5.  **Baixar a Chave (JSON):**
-    * Volte no Google Cloud Console, na lista de contas de serviço.
-    * Clique nos três pontinhos da conta que você criou > **Gerenciar Chaves**.
-    * Clique em "Adicionar Chave" > "Criar nova chave" > Selecione **JSON**.
-    * Um arquivo será baixado no seu computador.
-
-### Passo 4: Conectar tudo (O Segredo)
-
-Agora precisamos dizer ao Streamlit onde está essa chave.
-
-1.  Na pasta do seu projeto (`ProjetoFinAuto`), crie uma pasta chamada `.streamlit` (com ponto na frente).
-2.  Dentro dela, crie um arquivo de texto chamado `secrets.toml`.
-3.  Abra esse arquivo e cole o conteúdo abaixo, substituindo pelos dados que estão no arquivo JSON que você baixou:
-
-```toml
-[connections.gsheets]
-spreadsheet = "Cole aqui o Link da sua Planilha do Google"
-type = "service_account"
-project_id = "xxx"
-private_key_id = "xxx"
-private_key = "xxx"
-client_email = "xxx"
-client_id = "xxx"
-auth_uri = "https://accounts.google.com/o/oauth2/auth"
-token_uri = "https://oauth2.googleapis.com/token"
-auth_provider_x509_cert_url = "https://www.googleapis.com/oauth2/v1/certs"
-client_x509_cert_url = "xxx"
